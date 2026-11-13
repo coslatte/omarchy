@@ -1,0 +1,7 @@
+[Unit]
+Description=Watch Omarchy power-glass state for Zed
+[Path]
+PathChanged=%t/omarchy-power-glass-state
+Unit=omarchy-zed-glass.service
+[Install]
+WantedBy=default.target

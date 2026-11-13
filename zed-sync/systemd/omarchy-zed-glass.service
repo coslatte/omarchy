@@ -1,0 +1,5 @@
+[Unit]
+Description=Update the Omarchy theme for Zed
+[Service]
+Type=oneshot
+ExecStart=%h/.local/bin/omarchy-zed-themes

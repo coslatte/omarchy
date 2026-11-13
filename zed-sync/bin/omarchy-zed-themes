@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# 2026-11-11 11:30: solicitud: traducir la configuración de neovim a un tema único de zed.
+
+# Generate one local Zed theme from Omarchy's active profile.
+config_dir="${XDG_CONFIG_HOME:-$HOME/.config}"
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy-zed-themes"
+zed_themes="$config_dir/zed/themes"
+mkdir -p "$state_dir" "$zed_themes"
+exec 8>"$state_dir/generate.lock"
+flock 8
+
+tmp=$(mktemp -d "$state_dir/tmp.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+destination="$zed_themes/Omarchy.json"
+
+write_generated_theme() {
+  local profile="$1" colors="$2" output="$3"
+  local tmp_theme="$tmp/theme.json"
+  local key value
+  declare -A c=()
+  while IFS=$'\t' read -r key value; do c["$key"]="$value"; done < <(omarchy-theme-color --file "$colors" --all)
+  local required=(background foreground accent muted dark_background darker_background lighter_background red orange yellow green blue cyan magenta color0 color1 color2 color3 color4 color5 color6 color7 color8 color9 color10 color11 color12 color13 color14 color15)
+  for key in "${required[@]}"; do
+    [[ -n "${c[$key]:-}" ]] || { echo "Missing color '$key' in $colors" >&2; return 1; }
+  done
+  local appearance=dark
+  [[ "${c[mode]:-dark}" == light ]] && appearance=light
+  python - "$profile" "$appearance" "$output" <<'PY'
+import json, os, re, sys, pathlib, subprocess, tempfile
+profile, appearance, output = sys.argv[1:]
+try:
+    import tomllib
+except ImportError:
+    raise SystemExit("Python 3.11+ is required")
+with open(os.environ["OMARCHY_ZED_COLORS"], "rb") as f:
+    raw = tomllib.load(f)
+colors = {}
+for key, value in raw.items():
+    if isinstance(value, str): colors[key] = value
+    elif isinstance(value, dict): colors.update(value)
+palette_cursor = colors.get("cursor")
+profile_dir = pathlib.Path(os.environ["OMARCHY_ZED_PROFILE_DIR"])
+neovim_syntax = {}
+neovim_ui = {}
+neovim = pathlib.Path(os.environ["OMARCHY_ZED_COLORS"]).parent / "neovim.lua"
+if neovim.is_file():
+    lua = neovim.read_text()
+    aliases = {"bg":"background", "dark_bg":"dark_background", "darker_bg":"darker_background", "lighter_bg":"lighter_background", "fg":"foreground", "dark_fg":"dark_foreground", "light_fg":"light_foreground", "bright_fg":"bright_foreground"}
+    for key, value in re.findall(r'\b([a-z_]+)\s*=\s*"(#[0-9A-Fa-f]{6,8})"', lua):
+        colors[aliases.get(key, key)] = value[:7]
+    scheme_match = re.search(r'colorscheme\s*=\s*["\']([A-Za-z0-9_.-]+)', lua)
+    if scheme_match:
+        scheme = scheme_match.group(1)
+        if scheme:
+            with tempfile.NamedTemporaryFile() as export:
+                env = os.environ.copy()
+                env["OMARCHY_ZED_EXPORT"] = export.name
+                try:
+                    subprocess.run([
+                        "nvim", "--headless", "-c",
+                        "lua dofile(vim.fn.expand('~/.local/bin/omarchy-zed-neovim-export.lua'))", "-c", "qa!",
+                    ], env=env, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, timeout=20)
+                    export.seek(0)
+                    exported = json.load(export)
+                    if exported.get("colorscheme") != scheme:
+                        raise ValueError(f"expected {scheme}, got {exported.get('colorscheme')}")
+                    neovim_syntax = exported.get("syntax", {})
+                    neovim_ui = exported.get("ui", {})
+                    for key, value in neovim_syntax.items():
+                        if value and value.get("color"):
+                            colors[key] = value["color"]
+                except (OSError, subprocess.SubprocessError, ValueError) as error:
+                    print(f"Neovim color export failed for {scheme}; using colors.toml: {error}", file=sys.stderr)
+def color(key, fallback):
+    return colors.get(key, fallback)
+bg=color("background", "#1e1e1e"); fg=color("foreground", "#eeeeee")
+accent=color("accent", color("blue", "#569cd6")); muted=color("muted", color("color8", fg))
+syntax={"attribute":"orange","boolean":"orange","comment":"muted","comment.doc":"muted","constant":"yellow","constant.builtin":"bright_yellow","constructor":"cyan","embedded":"foreground","emphasis":"foreground","emphasis.strong":"foreground","enum":"yellow","function":"blue","hint":"cyan","keyword":"magenta","label":"accent","link_text":"blue","link_uri":"cyan","number":"orange","operator":"accent","predictive":"muted","preproc":"magenta","primary":"foreground","property":"cyan","punctuation":"muted","punctuation.bracket":"foreground","punctuation.delimiter":"muted","punctuation.list_marker":"accent","punctuation.special":"orange","string":"green","string.escape":"bright_green","string.regex":"cyan","string.special":"bright_cyan","string.special.symbol":"bright_cyan","tag":"red","tag.doctype":"magenta","text.literal":"green","title":"yellow","type":"yellow","type.builtin":"bright_yellow","variable":"foreground","variable.special":"bright_magenta","variable.parameter":"cyan","variant":"cyan"}
+style={"background":bg,"editor.background":bg,"editor.foreground":fg,"text":fg,"text.muted":muted,"border":color("darker_background",bg),"element.background":color("dark_background",bg),"element.hover":color("selection",accent),"element.selected":color("selection_background",accent),"editor.gutter.background":bg,"editor.active_line.background":color("lighter_background",bg),"editor.line_number":muted,"editor.active_line_number":fg,"editor.selection.background":color("selection_background",accent),"editor.selection.foreground":color("selection_foreground",bg),"editor.highlighted_line.background":color("selection",color("lighter_background",bg)),"panel.background":bg,"tab_bar.background":bg,"status_bar.background":color("dark_background",bg),"terminal.background":bg,"terminal.foreground":fg,"terminal.ansi.black":color("color0",bg),"terminal.ansi.red":color("red",accent),"terminal.ansi.green":color("green",accent),"terminal.ansi.yellow":color("yellow",accent),"terminal.ansi.blue":color("blue",accent),"terminal.ansi.magenta":color("magenta",accent),"terminal.ansi.cyan":color("cyan",accent),"terminal.ansi.white":color("color7",fg),"terminal.ansi.bright_black":color("color8",muted),"terminal.ansi.bright_red":color("bright_red",color("red",accent)),"terminal.ansi.bright_green":color("bright_green",color("green",accent)),"terminal.ansi.bright_yellow":color("bright_yellow",color("yellow",accent)),"terminal.ansi.bright_blue":color("bright_blue",color("blue",accent)),"terminal.ansi.bright_magenta":color("bright_magenta",color("magenta",accent)),"terminal.ansi.bright_cyan":color("bright_cyan",color("cyan",accent)),"terminal.ansi.bright_white":color("color15",fg)}
+style.update(neovim_ui)
+selection = color("selection", bg)
+style["players"] = [{"cursor": palette_cursor or color("cursor", fg), "background": bg, "selection": selection}]
+style.setdefault("editor.document_highlight.bracket_background", accent + "40" if re.fullmatch(r"#[0-9a-fA-F]{6}", accent) else accent)
+style["syntax"]={k:neovim_syntax[k].copy() if neovim_syntax.get(k) else {"color":color(v,accent)} for k,v in syntax.items()}
+theme={"name":"Omarchy","appearance":appearance,"style":style}
+family={"$schema":"https://zed.dev/schema/themes/v0.2.0.json","name":"Omarchy","author":"Omarchy","themes":[theme]}
+with open(output,"w") as f: json.dump(family,f,indent=2); f.write("\n")
+PY
+}
+
+colors="$HOME/.local/state/omarchy/current/theme/colors.toml"
+if [[ ! -f "$colors" ]]; then
+  echo "Active Omarchy profile has no colors.toml; leaving $destination unchanged" >&2
+  exit 0
+fi
+name=$(<"$HOME/.local/state/omarchy/current/theme.name")
+profile_dir="$HOME/.config/omarchy/themes/$name"
+[[ -d "$profile_dir" ]] || profile_dir="/usr/share/omarchy/themes/$name"
+export OMARCHY_ZED_COLORS="$colors" OMARCHY_ZED_PROFILE_DIR="$profile_dir"
+active_theme="$HOME/.local/state/omarchy/current/theme"
+profile_zed="$active_theme/zed.json"
+[[ -f "$profile_zed" ]] || profile_zed="$active_theme/aether.zed.json"
+if [[ -f "$profile_zed" ]]; then
+  python - "$profile_zed" "$tmp/theme.json" <<'PY'
+import json,sys
+with open(sys.argv[1]) as f: data=json.load(f)
+data["name"]="Omarchy"
+themes=data.get("themes",[])
+if not themes: raise SystemExit("Zed theme file contains no themes")
+theme=themes[0]
+theme["name"]="Omarchy"
+# A profile theme may use an older schema. Preserve its authored style while
+# normalizing only its selectable name.
+with open(sys.argv[2],"w") as f: json.dump(data,f,indent=2); f.write("\n")
+PY
+else
+  OMARCHY_ZED_COLORS="$colors" OMARCHY_ZED_PROFILE_DIR="$profile_dir" write_generated_theme "$name" "$colors" "$tmp/theme.json"
+fi
+# Apply Omarchy's current glass profile to surface fills without fading text.
+python - "$tmp/theme.json" "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/omarchy-power-glass-state" <<'PY'
+import json, pathlib, sys
+theme_path, state_path = map(pathlib.Path, sys.argv[1:])
+try:
+    state = state_path.read_text().strip().split("|")
+except OSError:
+    state = []
+data = json.loads(theme_path.read_text())
+style = data["themes"][0]["style"]
+base = style.get("editor.background") or style.get("background")
+if base:
+    for key in ("background", "surface.background", "editor.background", "editor.gutter.background",
+                "panel.background", "elevated_surface.background", "editor.subheader.background",
+                "title_bar.background", "title_bar.inactive_background",
+                "status_bar.background", "toolbar.background", "tab_bar.background",
+                "tab.active_background", "tab.inactive_background", "terminal.background"):
+        if style.get(key) is None:
+            style[key] = base
+surface_keys = {
+    "background", "surface.background", "editor.background", "editor.gutter.background",
+    "panel.background", "title_bar.background", "title_bar.inactive_background",
+    "status_bar.background", "toolbar.background", "tab_bar.background",
+    "tab.active_background", "tab.inactive_background", "element.background",
+    "elevated_surface.background", "editor.subheader.background", "terminal.background", "terminal.ansi.background",
+    "element.hover", "element.active", "element.selected", "element.disabled",
+    "ghost_element.hover", "ghost_element.active", "ghost_element.selected", "ghost_element.disabled",
+    "editor.active_line.background",
+    "editor.highlighted_line.background", "editor.selection.background",
+}
+if len(state) == 5 and state[0] == "glassy":
+    try:
+        opacity = min(1.0, max(0.0, float(state[4])))
+    except ValueError:
+        opacity = 1.0
+    alpha = round(opacity * 255)
+    style["background.appearance"] = "transparent"
+    for key in surface_keys:
+        value = style.get(key)
+        if isinstance(value, str) and len(value) in (7, 9) and value.startswith("#"):
+            try:
+                existing_alpha = int(value[7:9], 16) if len(value) == 9 else 255
+                combined_alpha = round(existing_alpha * alpha / 255)
+                style[key] = value[:7] + f"{combined_alpha:02x}"
+            except ValueError:
+                pass
+    # Avoid stacking the same translucent fill underneath the editor and panels.
+    for key in ("background", "surface.background"):
+        value = style.get(key)
+        if isinstance(value, str) and value.startswith("#") and len(value) in (7, 9):
+            style[key] = value[:7] + "00"
+    style["editor.gutter.background"] = style.get("editor.background", style.get("editor.gutter.background"))
+    style["ghost_element.background"] = "#00000000"
+elif len(state) == 5 and state[0] == "opaque":
+    style["background.appearance"] = "opaque"
+    for key in surface_keys:
+        value = style.get(key)
+        if isinstance(value, str) and value.startswith("#") and len(value) == 9:
+            style[key] = value[:7]
+theme_path.write_text(json.dumps(data, indent=2) + "\n")
+PY
+python -m json.tool "$tmp/theme.json" >/dev/null
+mv -f -- "$tmp/theme.json" "$destination"
+# Remove profile catalog files created by the earlier generator.
+echo "Updated Omarchy Zed theme from profile '$name'"
