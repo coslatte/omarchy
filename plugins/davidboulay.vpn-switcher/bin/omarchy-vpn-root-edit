@@ -1,0 +1,66 @@
+#!/usr/bin/env bash
+# Edit a root-owned AmneziaWG profile in the user's own editor.
+#
+#   omarchy-vpn-root-edit /etc/amnezia/amneziawg/<name>.conf <editor> [args...]
+#
+# The editor command must block until the file is closed (subl --wait, nvim…);
+# the backend picks one from Omarchy's default editor.
+#
+# Why not sudoedit: it needs a terminal for its password or FIDO prompt, and a
+# floating terminal sits above the GUI editor it then opens, so the editor
+# lands behind it. It also stages the copy in /var/tmp, which is on disk, and
+# these files hold a private key. Here both prompts go through polkit (the
+# session's own agent, no terminal), and the copy lives in $XDG_RUNTIME_DIR,
+# which is RAM-backed and private to the user. The cost is a second prompt to
+# write the file back, asked only when something changed.
+
+set -euo pipefail
+
+readonly PROFILE_RE='^/etc/amnezia/amneziawg/[a-zA-Z0-9_=+.-]{1,15}\.conf$'
+
+notify() {
+  notify-send -a "VPN" "$@" 2>/dev/null || true
+}
+
+die() {
+  printf '%s\n' "$*" >&2
+  notify -u critical "VPN profile not edited" "$*"
+  exit 1
+}
+
+path=${1:-}
+shift || true
+(($# > 0)) || die "usage: omarchy-vpn-root-edit <profile.conf> <editor> [args...]"
+# The one root write this script makes is to this path, so it is held to
+# awg-quick's own directory and interface-name pattern, not taken on trust.
+[[ $path =~ $PROFILE_RE ]] || die "Refusing to edit $path: not an AmneziaWG profile"
+
+name=${path##*/}
+umask 077
+work=$(mktemp -d "${XDG_RUNTIME_DIR:-/tmp}/omarchy-vpn-edit.XXXXXX")
+trap 'rm -rf "$work"' EXIT
+original="$work/.original"
+copy="$work/$name"
+
+if ! pkexec /usr/bin/cat -- "$path" >"$original"; then
+  die "Could not read $name: authentication was cancelled or the file is missing."
+fi
+cp -- "$original" "$copy"
+
+"$@" "$copy" || true
+
+if cmp -s -- "$original" "$copy"; then
+  notify "$name unchanged"
+  exit 0
+fi
+
+if pkexec /usr/bin/install -m 600 -o root -g root -- "$copy" "$path"; then
+  notify "$name saved" "A tunnel that is up uses it after it reconnects."
+  exit 0
+fi
+
+# Never throw away an edit that could not be written: keep it where only the
+# user can read it, and say where.
+kept="${XDG_RUNTIME_DIR:-/tmp}/$name.unsaved"
+cp -- "$copy" "$kept"
+die "Could not write $name. Your edit is kept in $kept until you log out."

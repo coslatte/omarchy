@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "id": "cosmiclatte.notifications",
+  "name": "Notifications",
+  "version": "1.0.0",
+  "author": "Cosmiclatte",
+  "description": "Recent notification history with pagination",
+  "kinds": ["bar-widget"],
+  "entryPoints": { "barWidget": "BarWidget.qml" },
+  "barWidget": {
+    "displayName": "Notifications",
+    "description": "Browse notification history",
+    "category": "Utilities",
+    "allowMultiple": false
+  }
+}

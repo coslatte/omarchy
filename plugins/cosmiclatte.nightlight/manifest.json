@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "cosmiclatte.nightlight",
+  "name": "Night Light Control",
+  "version": "1.0.0",
+  "author": "Cosmiclatte",
+  "description": "Bar control for night light temperature",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Night Light Control",
+    "description": "Adjust night light temperature",
+    "category": "System",
+    "allowMultiple": false
+  }
+}

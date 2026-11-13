@@ -1,0 +1,61 @@
+{
+  "schemaVersion": 1,
+  "id": "com.windscribe.vpn",
+  "name": "Windscribe",
+  "version": "0.5.4",
+  "author": "Windscribe Limited",
+  "license": "MIT",
+  "description": "Windscribe controls for Omarchy in a terminal-grade panel: one-key connect, live traffic, exit search with favourites, Firewall, protocol and port selection, IP rotation, and allowance tracking.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Windscribe",
+    "description": "Connect, change locations, inspect tunnel traffic, rotate your IP, and control the Windscribe Firewall from the bar.",
+    "category": "Network",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "refreshIntervalSec": 5,
+      "preferredProtocol": "",
+      "notifications": true,
+      "motion": true
+    },
+    "schema": [
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "description": "Status poll interval while the panel is closed. Open panel polls every 3 seconds.",
+        "min": 2,
+        "max": 60,
+        "step": 1,
+        "defaultValue": 5
+      },
+      {
+        "key": "preferredProtocol",
+        "type": "string",
+        "label": "Preferred Protocol",
+        "description": "WireGuard, UDP, TCP, Stealth, or WStunnel, optionally followed by :port. Empty lets Windscribe choose.",
+        "defaultValue": ""
+      },
+      {
+        "key": "notifications",
+        "type": "boolean",
+        "label": "Desktop notifications",
+        "description": "Alerts on connection and unexpected drops.",
+        "defaultValue": true
+      },
+      {
+        "key": "motion",
+        "type": "boolean",
+        "label": "Interface motion",
+        "description": "Animates tunnel flow and state transitions.",
+        "defaultValue": true
+      }
+    ]
+  }
+}
