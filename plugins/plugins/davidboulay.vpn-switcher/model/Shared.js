@@ -1,0 +1,267 @@
+.pragma library
+
+// Helpers every backend leans on, and the widget's own settings. Anything here
+// is by definition not one tool's problem: a parser or row-builder that only
+// one backend calls belongs in that backend's file instead.
+
+// Nerd Font glyphs are built from codepoints instead of raw characters so the
+// file survives editing tools that mangle multi-byte sequences.
+var GLYPH_VPN = String.fromCodePoint(0xF0582)
+var GLYPH_CHECK = String.fromCodePoint(0xF012C)
+var GLYPH_LOCK = String.fromCodePoint(0xF033E)
+var GLYPH_BOLT = String.fromCodePoint(0xF04C5)
+var GLYPH_DICE = String.fromCodePoint(0xF01D5)
+var GLYPH_SWAP = String.fromCodePoint(0xF04E1)
+var GLYPH_SHIELD = String.fromCodePoint(0xF0498)
+// A shield with a lock in it: reads as neither the bare shield WireGuard uses
+// nor the bare padlock OpenVPN does, which is the point — the three sit next
+// to each other in the same list.
+var GLYPH_SHIELD_LOCK = String.fromCodePoint(0xF099D)
+var GLYPH_CHEVRON_DOWN = String.fromCodePoint(0xF0140)
+var GLYPH_CHEVRON_UP = String.fromCodePoint(0xF0143)
+var GLYPH_COG = String.fromCodePoint(0xF0493)
+var GLYPH_PENCIL = String.fromCodePoint(0xF03EB)
+var GLYPH_PLUS = String.fromCodePoint(0xF0415)
+var GLYPH_MAP_MARKER = String.fromCodePoint(0xF034E)
+
+// ----------------------------------------------------------------- shared
+
+// The `barIcon` setting: which mark the bar shows. "WireGuard" has no glyph —
+// no Nerd Font carries it — so it comes back empty and Panel.qml draws
+// WireGuardMark.qml in its place. Anything unrecognised falls back to the
+// default, the same as an unset value, so a typo in shell.json still leaves an
+// icon to click.
+var BAR_ICON_WIREGUARD = "WireGuard"
+
+function barIconGlyph(setting) {
+  var value = String(setting || "")
+  if (value === BAR_ICON_WIREGUARD) return ""
+  if (value === "Shield") return GLYPH_SHIELD
+  return GLYPH_VPN
+}
+
+
+// The exit address lookup answers with a bare address and nothing else. A
+// captive portal's login page, a proxy's error body, or anything else that
+// came back with it is not an answer — and this is the one number a user reads
+// to decide whether the tunnel is carrying their traffic, so rendering
+// whatever arrived would be the widget confirming a route it never saw.
+// Returns "" for anything that is not an address literal.
+// ipinfo.io's JSON for the exit address, as "City, CC" ("Singapore, SG").
+// It is shown beside the public IP because an address alone does not tell you
+// which country you came out in, and that is the thing a switch is meant to
+// change. Only short plain-text fields are taken; anything else is dropped
+// rather than drawn.
+function parseIpLocation(raw) {
+  var data
+  try { data = JSON.parse(String(raw || "")) } catch (e) { return "" }
+  if (!data || typeof data !== "object") return ""
+  function clean(value) {
+    var text = typeof value === "string" ? value.trim() : ""
+    return /^[^\u0000-\u001f<>]{1,40}$/.test(text) ? text : ""
+  }
+  var country = clean(data.country)
+  if (!/^[A-Z]{2}$/.test(country)) country = ""
+  var city = clean(data.city)
+  if (city !== "" && country !== "") return city + ", " + country
+  return city !== "" ? city : country
+}
+
+function parsePublicIp(raw) {
+  var text = String(raw || "").trim()
+  // Longest possible IPv6 text form; anything longer is not an address.
+  if (text === "" || text.length > 45) return ""
+
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(text)) {
+    var octets = text.split(".")
+    for (var i = 0; i < octets.length; i++) {
+      if (parseInt(octets[i], 10) > 255) return ""
+    }
+    return text
+  }
+
+  // IPv6 has too many legal spellings to re-implement here, so this checks the
+  // alphabet and the shape rather than the grouping.
+  if (/^[0-9a-fA-F:]+$/.test(text) && text.indexOf("::") === text.lastIndexOf("::")) {
+    if (text.indexOf(":") !== -1 && !/:::/.test(text)) return text.toLowerCase()
+  }
+  return ""
+}
+
+function elide(text, limit) {
+  var value = String(text || "").replace(/\s+/g, " ").trim()
+  return value.length > limit ? value.substring(0, limit - 1) + "…" : value
+}
+
+// "a", "a or b", "a, b, or c". Used for the line listing what a user could
+// install, which is assembled from the backends rather than written out, so
+// that adding one cannot leave the sentence naming a shorter list than the
+// widget actually supports.
+function sentenceList(items, conjunction) {
+  var parts = []
+  for (var i = 0; i < (items || []).length; i++) {
+    var item = String(items[i] || "").trim()
+    if (item !== "" && parts.indexOf(item) === -1) parts.push(item)
+  }
+  var word = conjunction || "or"
+  if (parts.length === 0) return ""
+  if (parts.length === 1) return parts[0]
+  if (parts.length === 2) return parts[0] + " " + word + " " + parts[1]
+  return parts.slice(0, -1).join(", ") + ", " + word + " " + parts[parts.length - 1]
+}
+
+function detail(label, value) {
+  return { label: label, value: String(value || "") }
+}
+
+// A tool setting the panel can flip. The value is always what the tool last
+// reported, never something the widget stores — nothing here owns a setting.
+function toggle(key, label, description, value) {
+  return { key: key, label: label, detail: description, value: value === true, busy: false }
+}
+
+// A toggle the user just flipped shows the new position and a busy marker until
+// the tool confirms it, so the switch does not sit still under the click.
+function applyPendingToggles(toggles, pending) {
+  if (!pending) return toggles
+  return toggles.map(function(entry) {
+    if (pending[entry.key] === undefined) return entry
+    return { key: entry.key, label: entry.label, detail: entry.detail, value: pending[entry.key] === true, busy: true }
+  })
+}
+
+// The favourite-countries setting, split and upper-cased. Shared because every
+// tool reads the same setting, though not in the same way: Proton and Mullvad
+// take the two-letter codes literally, while Windscribe names regions rather
+// than countries and matches these against those names. The parsing is common
+// to all of them; what a match means is the backend's own business.
+function favoriteCodes(raw) {
+  var codes = []
+  var parts = String(raw || "").split(",")
+  for (var i = 0; i < parts.length; i++) {
+    var code = parts[i].trim().toUpperCase()
+    if (code !== "" && codes.indexOf(code) < 0) codes.push(code)
+  }
+  return codes
+}
+
+// --------------------------------------------------------- widget settings
+
+// Which tools the user told the widget to ignore, stored as one comma-separated
+// string so the setting stays hand-editable in shell.json and in Omarchy's own
+// settings dialog, which has no array field.
+// `stackConnections`: whether a connect leaves the other tools' tunnels up.
+// Off (the default) is one tunnel at a time, because two full tunnels fight
+// over the default route. On is for tunnels that do not: an office network
+// carried next to a full tunnel, or a provider chained over another. It only
+// spans tools: a backend still swaps its own profiles, since one tool's two
+// profiles are almost always two exits for the same traffic.
+function tunnelsToDrop(othersConnected, stackConnections) {
+  return stackConnections === true ? [] : othersConnected
+}
+
+// The widget-wide option, drawn under the gear with the provider switches. It
+// reuses the provider row's shape — `hidden` drives the switch, inverted — so
+// the panel needs no row type of its own; `option` is what tells them apart.
+var STACK_OPTION = "stackConnections"
+var GLYPH_LAYERS = String.fromCodePoint(0xF0328)
+var GLYPH_LAYERS_OFF = String.fromCodePoint(0xF0329)
+
+// The always-visible line under the header: whether connects stack, and what
+// is stacked right now. `names` are the connected tunnels' summaries, one per
+// tool. Short, because it shares the panel's width with nothing else but has
+// to be read at a glance.
+function stackStatus(stackConnections, names) {
+  var up = names || []
+  if (stackConnections !== true) {
+    return { on: false, stacked: false, glyph: GLYPH_LAYERS_OFF, text: "Stacking off · one tunnel at a time" }
+  }
+  if (up.length >= 2) {
+    return { on: true, stacked: true, glyph: GLYPH_LAYERS, text: "Stacked · " + up.join(" + ") }
+  }
+  return { on: true, stacked: false, glyph: GLYPH_LAYERS, text: "Stacking on · tools can run together" }
+}
+
+// The gear's "Install AmneziaWG" row: a plain row (no `hidden`, so no
+// switch) that runs Omarchy's AUR helper in a terminal when activated.
+var INSTALL_AWG_OPTION = "installAmneziaWG"
+
+function installAwgRow(missing, glyph) {
+  var packages = missing || []
+  if (packages.length === 0) return null
+  return {
+    key: "option:" + INSTALL_AWG_OPTION,
+    option: INSTALL_AWG_OPTION,
+    label: "Install AmneziaWG",
+    detail: "Opens a terminal: " + packages.join(", "),
+    glyph: glyph,
+    packages: packages,
+    command: "omarchy-pkg-aur-add " + packages.join(" ")
+  }
+}
+
+function stackOptionRow(stackConnections, glyph) {
+  var on = stackConnections === true
+  return {
+    key: "option:" + STACK_OPTION,
+    option: STACK_OPTION,
+    label: "Stack connections",
+    detail: on ? "On · tunnels from different tools stay up together" : "Off · one tunnel at a time",
+    glyph: glyph,
+    hidden: !on
+  }
+}
+
+function parseBackendIds(raw) {
+  var ids = []
+  var parts = String(raw || "").split(",")
+  for (var i = 0; i < parts.length; i++) {
+    var id = parts[i].trim().toLowerCase()
+    if (id !== "" && ids.indexOf(id) === -1) ids.push(id)
+  }
+  return ids
+}
+
+// The setup hint the panel shows in place of "install a VPN tool", and the
+// command that clears it. Both come from the same backend — the first visible,
+// undetected one with a hint — so the line and what clicking it runs never
+// disagree. A detected backend's hint is ignored: the contract says a hint
+// explains why a tool is not detected, and `setup` over IPC runs the command
+// without the panel's own check that nothing is listed. The controller passes
+// plain { id, detected, hint, command } entries, read in its own binding.
+function pickSetup(entries, hiddenIds) {
+  for (var i = 0; i < entries.length; i++) {
+    var entry = entries[i]
+    if (entry.detected === true) continue
+    if (hiddenIds.indexOf(String(entry.id)) !== -1) continue
+    var hint = entry.hint === undefined || entry.hint === null ? "" : String(entry.hint)
+    if (hint === "") continue
+    var command = entry.command === undefined || entry.command === null ? "" : String(entry.command)
+    return { hint: hint, command: command }
+  }
+  return { hint: "", command: "" }
+}
+
+function joinBackendIds(ids) {
+  return ids.join(",")
+}
+
+function toggleBackendId(ids, id) {
+  var next = []
+  var found = false
+  for (var i = 0; i < ids.length; i++) {
+    if (ids[i] === id) found = true
+    else next.push(ids[i])
+  }
+  if (!found) next.push(id)
+  return next
+}
+
+// Whether a picked row is the tunnel that is already up. The controller skips
+// connecting to it, because every backend's connectTo would tear the tunnel
+// down and bring it back, dropping the connections inside it.
+function isCurrentTarget(backend, target) {
+  if (!backend || !target || backend.connected !== true) return false
+  var current = String(backend.currentKey || "")
+  return current !== "" && String(target.key || "") === current
+}

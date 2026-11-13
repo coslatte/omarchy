@@ -1,0 +1,82 @@
+#!/bin/bash
+set -euo pipefail
+
+state_dir="${XDG_STATE_HOME:-$HOME/.local/state}/omarchy/nightlight"
+state_file="$state_dir/temperature"
+
+valid_temperature() {
+  [[ $1 =~ ^[0-9]{4}$ ]] && (( 10#$1 >= 2500 && 10#$1 <= 6500 ))
+}
+
+remember_value() {
+  mkdir -p "$state_dir"
+  local key=$1 value=$2 pending
+  pending=$(mktemp "$state_dir/.$key.XXXXXX")
+  printf '%s\n' "$value" > "$pending"
+  if ! mv -f -- "$pending" "$state_dir/$key"; then
+    rm -f -- "$pending"
+    return 1
+  fi
+}
+
+requested=${1:-}
+if [[ $requested == restore ]]; then
+  [[ -f "$state_dir/enabled" ]] || exit 0
+  enabled=$(<"$state_dir/enabled")
+  case $enabled in
+    true)
+      temp=4000
+      saved=""
+      if [[ -f $state_file ]]; then saved=$(<"$state_file"); fi
+      if valid_temperature "$saved" && (( 10#$saved < 6500 )); then temp=$saved; fi
+      ;;
+    false) temp=6500 ;;
+    *) exit 2 ;;
+  esac
+  # Wait for the compositor's IPC socket at graphical-session startup.
+  for ((attempt=0; attempt<100; attempt++)); do
+    if hyprctl monitors >/dev/null 2>&1; then break; fi
+    sleep 0.2
+  done
+elif [[ $requested == toggle ]]; then
+  output=$(hyprctl hyprsunset temperature 2>/dev/null) || output=""
+  current=$(printf '%s' "$output" | grep -oE '[0-9]+' | head -n1) || current=""
+  if valid_temperature "$current" && (( 10#$current < 6000 )); then
+    remember_value temperature "$current"
+    temp=6500
+  else
+    temp=4000
+    saved=""
+    if [[ -f $state_file ]]; then saved=$(<"$state_file"); fi
+    if valid_temperature "$saved" && (( 10#$saved < 6500 )); then temp=$saved; fi
+  fi
+else
+  valid_temperature "$requested" || exit 2
+  temp=$((10#$requested))
+fi
+
+if [[ $requested == restore && $temp == 6500 ]] && ! pgrep -x hyprsunset >/dev/null; then
+  exit 0
+fi
+if ! pgrep -x hyprsunset >/dev/null; then
+  omarchy toggle nightlight >/dev/null
+fi
+# A new hyprsunset can apply its startup profile after accepting IPC.
+for ((attempt=0; attempt<10; attempt++)); do
+  if hyprctl hyprsunset temperature "$temp" >/dev/null 2>&1; then
+    if [[ $requested != restore ]]; then break; fi
+  fi
+  sleep 0.2
+done
+hyprctl hyprsunset temperature "$temp" >/dev/null
+if (( temp == 6500 )); then
+  hyprctl hyprsunset identity >/dev/null
+else
+  remember_value temperature "$temp"
+fi
+if (( temp < 6000 )); then
+  remember_value enabled true
+else
+  remember_value enabled false
+fi
+omarchy-shell -q nightlight refresh

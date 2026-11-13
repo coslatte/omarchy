@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "cosmiclatte.glass",
+  "name": "Glass Control",
+  "version": "1.0.0",
+  "author": "Cosmiclatte",
+  "description": "Control glass mode, blur, and opacity",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Glass Control",
+    "description": "Control glass mode, blur, and opacity",
+    "category": "System",
+    "allowMultiple": false
+  }
+}

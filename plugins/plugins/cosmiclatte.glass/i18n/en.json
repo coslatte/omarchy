@@ -1,0 +1,13 @@
+{
+  "title": "Glass",
+  "tooltip": "Glass effects · %1",
+  "status.on": "ON",
+  "status.off": "OFF",
+  "mode.label": "Mode",
+  "mode.auto": "Auto",
+  "mode.on": "Always",
+  "mode.off": "Off",
+  "blur.label": "Blur",
+  "opacity.label": "Opacity",
+  "error": "Could not apply glass settings"
+}

@@ -1,0 +1,13 @@
+{
+  "title": "Efecto de vidrio",
+  "tooltip": "Efecto de vidrio · %1",
+  "status.on": "ACTIVO",
+  "status.off": "INACTIVO",
+  "mode.label": "Modo",
+  "mode.auto": "Auto",
+  "mode.on": "Siempre",
+  "mode.off": "Apagado",
+  "blur.label": "Desenfoque",
+  "opacity.label": "Opacidad",
+  "error": "No se pudieron aplicar los ajustes de vidrio"
+}
