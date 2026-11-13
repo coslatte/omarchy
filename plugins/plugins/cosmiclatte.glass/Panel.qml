@@ -241,6 +241,7 @@ Ui.Panel {
             model: root.modeOptions
             delegate: Ui.Button {
               required property string modelData
+              required property int index
               Layout.fillWidth: true
               Layout.minimumWidth: 0
               Layout.preferredWidth: (modeGroup.width - modeGroup.spacing * (root.modeOptions.length - 1)) / root.modeOptions.length

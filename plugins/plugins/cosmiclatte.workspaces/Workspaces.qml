@@ -132,45 +132,41 @@ BarWidget {
   // The workspace each monitor shows carries its layout: a square tiles, a
   // circle scrolls, and a triangle floats. Clicking it cycles to the next one,
   // as Super + L does.
-  property string activeMode: "dwindle"
-  property bool modeStale: false
-
   function modeGlyph(mode) {
-    if (mode === "scrolling") return "󰝥"
-    if (mode === "floating") return "󰔶"
-    return "󱓻"
+    if (mode === "scrolling") return "↕"
+    if (mode === "floating") return "□"
+    if (mode === "dwindle" || mode === "master") return "▦"
+    return ""
   }
 
-  // A layout only changes through the layout commands, which ask for a refresh,
-  // or a config reload, so each workspace's mode is read once and cached rather
-  // than running the script on every workspace switch.
+  function modeName(mode) {
+    if (mode === "scrolling") return "Scrolling layout"
+    if (mode === "floating") return "Floating windows"
+    if (mode === "dwindle") return "Dwindle tiling"
+    if (mode === "master") return "Master tiling"
+    return ""
+  }
+
+  // Read every workspace shown in this bar once, then keep its mode until a
+  // layout or workspace change invalidates the cache.
   property var modeCache: ({})
+  property var modeQueue: []
   property int modeGeneration: 0
   property int modeProcWorkspace: -1
   property int modeProcGeneration: 0
 
-  function showActiveMode() {
-    var mode = root.modeCache[root.activeWorkspaceId()]
-    if (mode !== undefined) root.activeMode = mode
-    else readMode()
-  }
-
   function readMode() {
-    if (modeProc.running) {
-      root.modeStale = true
-      return
-    }
-    var id = root.activeWorkspaceId()
-    if (id === -1) return
-    root.modeProcWorkspace = id
-    root.modeProcGeneration = root.modeGeneration
-    modeProc.command = ["omarchy-hyprland-workspace-layout-current", String(id)]
+    if (modeProc.running || modeQueue.length === 0) return
+    modeProcWorkspace = modeQueue.shift()
+    modeProcGeneration = modeGeneration
+    modeProc.command = ["omarchy-hyprland-workspace-layout-current", String(modeProcWorkspace)]
     modeProc.running = true
   }
 
   function refresh() {
-    root.modeCache = ({})
-    root.modeGeneration++
+    modeCache = ({})
+    modeQueue = root.workspaceIds()
+    modeGeneration++
     readMode()
   }
 
@@ -186,11 +182,11 @@ BarWidget {
   }
 
   Component.onCompleted: refresh()
-  onMonitorChanged: root.showActiveMode()
+  onMonitorChanged: root.refresh()
 
   Connections {
     target: root.monitor
-    function onActiveWorkspaceChanged() { root.showActiveMode() }
+    function onActiveWorkspaceChanged() { root.refresh() }
   }
 
   Connections {
@@ -208,6 +204,7 @@ BarWidget {
       if (switched || name === "moveworkspacev2" || name === "changeworkspaceid") {
         Hyprland.refreshMonitors()
         Hyprland.refreshWorkspaces()
+        root.refresh()
       }
     }
   }
@@ -217,18 +214,14 @@ BarWidget {
     stdout: StdioCollector {
       onStreamFinished: {
         var mode = text.trim()
-        // A read that started before a refresh may predate the change.
-        if (!mode || root.modeProcGeneration !== root.modeGeneration) return
-        root.modeCache[root.modeProcWorkspace] = mode
-        if (root.modeProcWorkspace === root.activeWorkspaceId()) root.activeMode = mode
+        if (mode && root.modeProcGeneration === root.modeGeneration) {
+          var next = Object.assign({}, root.modeCache)
+          next[root.modeProcWorkspace] = mode
+          root.modeCache = next
+        }
       }
     }
-    onExited: {
-      if (!root.modeStale) return
-      root.modeStale = false
-      // Deferred: the process still reports running while it signals exit.
-      Qt.callLater(root.showActiveMode)
-    }
+    onExited: Qt.callLater(root.readMode)
   }
 
   // Super + L and the default layout change the mode without a focus change,
@@ -299,8 +292,8 @@ BarWidget {
         hasVisualContent: true
         fixedWidth: root.vertical ? root.barSize : Math.max(Style.space(20), contents.implicitWidth + Style.space(18))
         fixedHeight: root.vertical ? Math.max(root.barSize, contents.implicitHeight + Style.space(12)) : root.barSize
-        tooltipText: windowTitles.map(function(title) {
-          return String(title).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+        tooltipText: [root.modeName(root.modeCache[modelData])].concat(windowTitles).filter(function(value) { return value !== "" }).map(function(value) {
+          return String(value).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
         }).join(" · ")
         onPressed: function() { root.focusWorkspace(modelData) }
         onWheelMoved: function(delta) { root.scrollWorkspaces(delta) }
@@ -316,6 +309,16 @@ BarWidget {
           id: contents
           anchors.centerIn: parent
           spacing: Style.space(5)
+          Text {
+            visible: root.modeGlyph(root.modeCache[modelData]) !== ""
+            text: root.modeGlyph(root.modeCache[modelData])
+            textFormat: Text.PlainText
+            color: root.bar ? root.bar.barForeground : Color.foreground
+            opacity: shown ? 1 : (occupied ? 0.85 : 0.55)
+            font.family: Style.font.family
+            font.pixelSize: Style.font.body
+            anchors.verticalCenter: parent.verticalCenter
+          }
           Text {
             text: slot === root.slots ? "0" : String(slot)
             textFormat: Text.PlainText
