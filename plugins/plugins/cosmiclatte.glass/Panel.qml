@@ -232,20 +232,36 @@ Ui.Panel {
           font.bold: root.focusSection === "mode"
         }
 
-        Ui.ButtonGroup {
+        RowLayout {
           id: modeGroup
           Layout.fillWidth: true
-          enabled: !root.busy
-          cursorIndex: root.focusSection === "mode" ? root.modeCursor : -1
-          options: [
-            { value: "auto", label: strings.t("mode.auto") },
-            { value: "on", label: strings.t("mode.on") },
-            { value: "off", label: strings.t("mode.off") }
-          ]
-          value: root.mode
-          onChanged: function(value) {
-            root.modeCursor = root.modeOptions.indexOf(value)
-            root.applySetting("mode", value)
+          spacing: Style.space(6)
+
+          Repeater {
+            model: root.modeOptions
+            delegate: Ui.Button {
+              required property string modelData
+              Layout.fillWidth: true
+              Layout.minimumWidth: 0
+              Layout.preferredWidth: (modeGroup.width - modeGroup.spacing * (root.modeOptions.length - 1)) / root.modeOptions.length
+              enabled: !root.busy
+              text: modelData === "auto" ? strings.t("mode.auto")
+                : modelData === "on" ? strings.t("mode.on") : strings.t("mode.off")
+              selected: root.mode === modelData
+              hasCursor: root.focusSection === "mode" && root.modeCursor === index
+              bordered: true
+              foreground: root.bar ? root.bar.foreground : Color.foreground
+              accent: Color.accent
+              fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+              fontSize: Style.font.body
+              onClicked: {
+                root.modeCursor = index
+                root.applySetting("mode", modelData)
+              }
+              onHovered: function(hovered) {
+                if (hovered) root.modeCursor = index
+              }
+            }
           }
         }
 
