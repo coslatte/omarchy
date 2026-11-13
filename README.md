@@ -1,18 +1,12 @@
 # Omarchy personal project
 
-Repositorio contenedor para organizar los proyectos personales relacionados con Omarchy, manteniendo el historial y los remotos de cada componente mediante submódulos Git.
+Repositorio unificado para proyectos personales relacionados con Omarchy.
 
-- `agents/`: reglas y agentes, repositorio `coslatte/agents`.
-- `plugins/`: plugins personalizados de Omarchy, repositorio `coslatte/omarchy-plugins`.
+- `agents/`: reglas y agentes, con el historial Git anterior integrado.
+- `plugins/`: plugins personalizados de Omarchy, con el historial Git anterior integrado.
 
-Clona el proyecto y sus componentes con:
-
-```bash
-git clone --recurse-submodules git@github.com:coslatte/omarchy.git
-```
-
-Actualiza ambos submódulos desde sus ramas remotas con:
+Clona el proyecto con:
 
 ```bash
-git submodule update --remote --merge
+git clone git@github.com:coslatte/omarchy.git
 ```
