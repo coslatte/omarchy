@@ -101,6 +101,21 @@ Panel {
     if (source.charAt(0) === "/") return Util.fileUrl(source)
     return Quickshell.iconPath(source, true)
   }
+  function screenshotSource(entry) {
+    if (!entry) return ""
+    if (entry.image) return mediaSource(entry.image)
+    try {
+      var argv = JSON.parse(entry.execArgv || "[]")
+      var path = argv.length === 2 && argv[0] === "xdg-open" ? String(argv[1]) : ""
+      var prefix = Quickshell.env("HOME") + "/Pictures/Screenshots/"
+      return path.indexOf(prefix) === 0 && path.indexOf("..") === -1 ? Util.fileUrl(path) : ""
+    } catch (error) { return "" }
+  }
+  function imageError() {
+    imageErrorProcess.command = ["omarchy-notification-send", "Image preview unavailable", "The screenshot file could not be found or opened."]
+    imageErrorProcess.running = true
+    root.previewImageOpen = false
+  }
 
   Process {
     id: historyProcess
@@ -116,6 +131,7 @@ Panel {
 
   Process { id: muteAppProcess; onExited: root.refresh() }
   Process { id: openAppProcess }
+  Process { id: imageErrorProcess }
 
   function openNotification(entry) {
     if (!entry || !entry.app || openAppProcess.running) return
@@ -155,6 +171,7 @@ Panel {
         fillMode: Image.PreserveAspectFit
         asynchronous: true
         smooth: true
+        onStatusChanged: if (status === Image.Error && root.previewImageOpen) root.imageError()
       }
       PanelActionButton {
         anchors.top: parent.top
@@ -271,13 +288,14 @@ Panel {
 
                       Image {
                         id: summaryIcon
-                        readonly property string iconSource: root.mediaSource(modelData.appIcon || modelData.image)
+                        readonly property string iconSource: modelData.app === "omasnap" && root.screenshotSource(modelData)
+                          ? root.screenshotSource(modelData) : root.mediaSource(modelData.appIcon || modelData.image)
                         anchors.fill: parent
                         source: iconSource
                         visible: iconSource !== "" && status !== Image.Error
                         sourceSize.width: width * Screen.devicePixelRatio
                         sourceSize.height: height * Screen.devicePixelRatio
-                        fillMode: Image.PreserveAspectFit
+                        fillMode: modelData.app === "omasnap" ? Image.PreserveAspectCrop : Image.PreserveAspectFit
                         asynchronous: true
                       }
                       Text {
@@ -337,7 +355,11 @@ Panel {
                     onEntered: root.selectedRowIndex = notificationCard.index
                   }
                   TapHandler {
-                    onTapped: { root.selectedRowIndex = notificationCard.index; root.openNotification(modelData) }
+                    onTapped: {
+                      root.selectedRowIndex = notificationCard.index
+                      if (root.screenshotSource(modelData)) root.previewImageOpen = true
+                      else root.openNotification(modelData)
+                    }
                   }
                 }
               }
@@ -489,9 +511,9 @@ Panel {
 
                 Image {
                   id: notificationImage
-                  readonly property string imageSource: root.selectedNotification ? root.mediaSource(root.selectedNotification.image) : ""
+                  readonly property string imageSource: root.screenshotSource(root.selectedNotification)
                   width: detailContent.width
-                  height: imageSource !== "" && status !== Image.Error ? Style.space(190) : 0
+                  height: imageSource !== "" && status === Image.Ready ? Style.space(190) : (imageSource !== "" ? Style.space(32) : 0)
                   visible: height > 0
                   source: imageSource
                   sourceSize.width: width * Screen.devicePixelRatio
@@ -501,9 +523,16 @@ Panel {
                   smooth: true
                   MouseArea {
                     anchors.fill: parent
-                    enabled: notificationImage.status === Image.Ready
+                    enabled: notificationImage.imageSource !== ""
                     cursorShape: Qt.PointingHandCursor
-                    onClicked: root.previewImageOpen = true
+                    onClicked: notificationImage.status === Image.Ready ? root.previewImageOpen = true : root.imageError()
+                  }
+                  Text {
+                    anchors.centerIn: parent
+                    visible: notificationImage.status === Image.Error
+                    text: "Screenshot unavailable · click to retry"
+                    textFormat: Text.PlainText
+                    color: root.contentForeground
                   }
                 }
 
@@ -518,6 +547,8 @@ Panel {
                   font.pixelSize: Style.font.bodySmall
                   wrapMode: Text.WrapAtWordBoundaryOrAnywhere
                   textFormat: Text.PlainText
+                  elide: Text.ElideNone
+                  maximumLineCount: -1
                 }
 
                 Text {

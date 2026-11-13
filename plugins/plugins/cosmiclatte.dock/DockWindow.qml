@@ -285,9 +285,16 @@ PanelWindow {
       id: tuckMotion
       enabled: window.shown
       NumberAnimation {
-        duration: Style.duration(tuckMotion.targetValue > 0 ? 120 : 180)
+        duration: Style.duration(tuckMotion.targetValue > 0 ? 120 : 210)
         easing.type: Easing.OutCubic
       }
+    }
+    scale: window.shown && window.autohide && !window.tucked ? 1.03 : 0.96
+    transformOrigin: window.position === "top" ? Item.Top
+      : window.position === "bottom" ? Item.Bottom
+      : window.position === "left" ? Item.Left : Item.Right
+    Behavior on scale {
+      NumberAnimation { duration: Style.duration(180); easing.type: Easing.OutCubic }
     }
 
     x: window.position === "left" ? window.gap - tuck
