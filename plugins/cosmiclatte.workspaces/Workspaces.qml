@@ -130,9 +130,9 @@ BarWidget {
   }
 
   function modeGlyph(mode) {
-    if (mode === "scrolling") return "↕"
-    if (mode === "floating") return "□"
-    if (mode === "dwindle" || mode === "master") return "⊞"
+    if (mode === "scrolling") return "󰝥"
+    if (mode === "floating") return "󰔶"
+    if (mode === "dwindle" || mode === "master") return "󱓻"
     return ""
   }
 

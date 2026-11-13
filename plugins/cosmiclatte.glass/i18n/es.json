@@ -1,13 +1,13 @@
 {
-  "title": "Efecto de vidrio",
-  "tooltip": "Efecto de vidrio · %1",
-  "status.on": "ACTIVO",
-  "status.off": "INACTIVO",
-  "mode.label": "Modo",
+  "title": "Glass",
+  "tooltip": "Glass effects · %1",
+  "status.on": "ON",
+  "status.off": "OFF",
+  "mode.label": "Mode",
   "mode.auto": "Auto",
-  "mode.on": "Siempre",
-  "mode.off": "Apagado",
-  "blur.label": "Desenfoque",
-  "opacity.label": "Opacidad",
-  "error": "No se pudieron aplicar los ajustes de vidrio"
+  "mode.on": "Always",
+  "mode.off": "Off",
+  "blur.label": "Blur",
+  "opacity.label": "Opacity",
+  "error": "Could not apply glass settings"
 }

@@ -4,7 +4,7 @@ import Quickshell.Io
 import qs.Commons
 import qs.Ui as Ui
 
-// 2026-11-10 11:53: solicitud: mostrar en vivo los valores al mover los controles.
+// 2026-11-10 11:53: request: show values live while moving the controls.
 Ui.Panel {
   id: root
   moduleName: "cosmiclatte.glass"
@@ -96,7 +96,7 @@ Ui.Panel {
     stdout: StdioCollector {
       waitForEnd: true
       onStreamFinished: {
-        // 2026-11-11 10:14: solicitud: mostrar el estado real de glass.
+        // 2026-11-11 10:14: request: show the actual glass state.
         if (settingProcess.running) {
           root.refreshPending = true
           return
@@ -165,7 +165,7 @@ Ui.Panel {
     onTriggered: if (panel.open) keyCatcher.forceActiveFocus()
   }
 
-  // 2026-11-10: solicitud: mantener accesible el botón con contenido dinámico.
+  // 2026-11-10: request: keep the button accessible with dynamic content.
   Ui.PopupCard {
     id: panel
     anchorItem: root.anchorItem

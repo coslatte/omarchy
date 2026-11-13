@@ -1,11 +1,14 @@
-# Omarchy personal project
+# omarchy personal setup
 
-Repositorio unificado para proyectos personales relacionados con Omarchy.
+> omarchy v4.5
 
-- `agents/`: reglas y agentes, con el historial Git anterior integrado.
-- `plugins/`: plugins personalizados de Omarchy, con el historial Git anterior integrado.
+unified personal projects related to omarchy:
 
-Clona el proyecto con:
+- plugins: personal plugins for workflow improvements.
+- agents: rules, skills.
+- keybindings: ghostty, neovim.
+- tinkering.
+- whatever else cool stuff.
 
 ```bash
 git clone git@github.com:coslatte/omarchy.git

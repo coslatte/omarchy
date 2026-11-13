@@ -4,7 +4,7 @@ import qs.Commons
 import qs.Commons as Commons
 import qs.Ui
 
-// 2026-11-10 11:51: solicitud: mantener operativo el botón del panel tras cambiar ajustes.
+// 2026-11-10 11:51: request: keep the panel button working after changing settings.
 BarWidget {
   id: root
   moduleName: "cosmiclatte.glass"
