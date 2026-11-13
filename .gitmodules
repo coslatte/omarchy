@@ -1,0 +1,6 @@
+[submodule "agents"]
+	path = agents
+	url = git@github.com:coslatte/agents.git
+[submodule "plugins"]
+	path = plugins
+	url = git@github.com:coslatte/omarchy-plugins.git
