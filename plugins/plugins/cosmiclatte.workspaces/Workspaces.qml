@@ -160,6 +160,12 @@ BarWidget {
     modeProc.running = true
   }
 
+  function ensureMode(id) {
+    if (id < 1 || modeCache[id] !== undefined || modeQueue.indexOf(id) !== -1 || (modeProc.running && modeProcWorkspace === id)) return
+    modeQueue = modeQueue.concat([id])
+    readMode()
+  }
+
   function refresh() {
     modeCache = ({})
     modeQueue = root.workspaceIds()
@@ -183,7 +189,7 @@ BarWidget {
 
   Connections {
     target: root.monitor
-    function onActiveWorkspaceChanged() { root.refresh() }
+    function onActiveWorkspaceChanged() { root.ensureMode(root.activeWorkspaceId()) }
   }
 
   Connections {
@@ -201,8 +207,8 @@ BarWidget {
       if (switched || name === "moveworkspacev2" || name === "changeworkspaceid") {
         Hyprland.refreshMonitors()
         Hyprland.refreshWorkspaces()
-        root.refresh()
       }
+      if (name === "moveworkspacev2" || name === "changeworkspaceid") root.refresh()
     }
   }
 
