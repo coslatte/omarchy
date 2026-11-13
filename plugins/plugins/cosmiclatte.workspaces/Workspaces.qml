@@ -129,13 +129,10 @@ BarWidget {
     if (target !== ids[index]) root.focusWorkspace(target)
   }
 
-  // The workspace each monitor shows carries its layout: a square tiles, a
-  // circle scrolls, and a triangle floats. Clicking it cycles to the next one,
-  // as Super + L does.
   function modeGlyph(mode) {
     if (mode === "scrolling") return "↕"
     if (mode === "floating") return "□"
-    if (mode === "dwindle" || mode === "master") return "▦"
+    if (mode === "dwindle" || mode === "master") return "⊞"
     return ""
   }
 
@@ -304,6 +301,13 @@ BarWidget {
           radius: Style.space(4)
           color: root.bar ? root.bar.barForeground : Color.foreground
           opacity: shown ? 0.18 : 0
+          scale: shown ? 1 : 0.94
+          Behavior on opacity {
+            NumberAnimation { duration: Style.duration(160); easing.type: Easing.OutCubic }
+          }
+          Behavior on scale {
+            NumberAnimation { duration: Style.duration(190); easing.type: Easing.OutCubic }
+          }
         }
         Row {
           id: contents
